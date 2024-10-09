@@ -1,37 +1,74 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
+
+// Check if the browser supports the SpeechRecognition API
+const SpeechRecognition = window.SpeechRecognition || (window).webkitSpeechRecognition;
 
 const VoiceSearch: React.FC = () => {
   const [isListening, setIsListening] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [transcript, setTranscript] = useState<string>('');
   const [lastSpokenTime, setLastSpokenTime] = useState<number | null>(null);
   const [tryAgainVisible, setTryAgainVisible] = useState<boolean>(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-console.log(isListening)
-  const { transcript, resetTranscript, listening } = useSpeechRecognition();
+
+  // Initialize speech recognition
+  useEffect(() => {
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const currentTranscript = Array.from(event.results)
+          .map((result) => result[0].transcript)
+          .join('');
+
+        setTranscript(currentTranscript);
+        setLastSpokenTime(Date.now());
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech Recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    } else {
+      alert('SpeechRecognition API is not supported in this browser.');
+    }
+  }, []);
 
   const handleStartListening = () => {
-    setIsListening(true);
-    SpeechRecognition.startListening({ continuous: true });
-    setLastSpokenTime(Date.now());
-    setTryAgainVisible(false);
+    if (recognitionRef.current) {
+      recognitionRef.current.start();
+      setIsListening(true);
+      setLastSpokenTime(Date.now());
+      setTryAgainVisible(false);
+    }
   };
 
   const handleStopListening = () => {
-    setIsListening(false);
-    SpeechRecognition.stopListening();
-    setTryAgainVisible(true); // Show try again button
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      setTryAgainVisible(true);
+    }
   };
 
   const handleSearch = useCallback(() => {
     setSearchTerm(transcript);
     handleStopListening();
-    console.log('Search term:', transcript);
-  },[transcript]);
+  }, [transcript]);
 
   const handleClear = () => {
     setSearchTerm('');
-    resetTranscript();
+    setTranscript('');
   };
 
   const handleGoogleSearch = () => {
@@ -43,16 +80,16 @@ console.log(isListening)
 
   // Check if the user stops speaking for more than 5 seconds
   useEffect(() => {
-    if (listening && transcript && lastSpokenTime) {
+    if (isListening && transcript && lastSpokenTime) {
       const timeSinceLastSpoken = Date.now() - lastSpokenTime;
 
-      if (timeSinceLastSpoken > 5000) {
+      if (timeSinceLastSpoken > 2000) {
         handleSearch();
       } else {
         clearTimeout(timeoutRef.current as ReturnType<typeof setTimeout>);
         timeoutRef.current = setTimeout(() => {
           handleSearch();
-        }, 5000);
+        }, 2000);
       }
     }
 
@@ -61,25 +98,18 @@ console.log(isListening)
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [transcript, lastSpokenTime, listening, handleSearch]);
+  }, [transcript, lastSpokenTime, isListening, handleSearch]);
 
-  // If user stops speaking for 5 seconds, stop listening
+  // Automatically stop listening after 5 seconds of silence
   useEffect(() => {
     const stopTimeout = setTimeout(() => {
-      if (listening && lastSpokenTime && Date.now() - lastSpokenTime > 5000) {
+      if (isListening && lastSpokenTime && Date.now() - lastSpokenTime > 5000) {
         handleStopListening();
       }
-    }, 5000);
+    }, 2000);
 
     return () => clearTimeout(stopTimeout);
-  }, [lastSpokenTime, listening]);
-
-  // Update last spoken time whenever transcript changes
-  useEffect(() => {
-    if (transcript) {
-      setLastSpokenTime(Date.now());
-    }
-  }, [transcript]);
+  }, [lastSpokenTime, isListening]);
 
   return (
     <div>
@@ -89,17 +119,17 @@ console.log(isListening)
         value={searchTerm}
         placeholder="Speak or type search"
         onChange={(e) => setSearchTerm(e.target.value)}
-        readOnly={listening} // Make the input editable after listening stops
+        readOnly={isListening} // Make the input editable after listening stops
       />
       <br />
-      <button onClick={handleStartListening} disabled={listening}>
-        {listening ? 'Listening...' : 'Start Listening'}
+      <button onClick={handleStartListening} disabled={isListening}>
+        {isListening ? 'Listening...' : 'Start Listening'}
       </button>
-      <button onClick={handleStopListening} disabled={!listening}>
+      <button onClick={handleStopListening} disabled={!isListening}>
         Stop
       </button>
       {tryAgainVisible && (
-        <button onClick={() =>  handleStartListening()}>
+        <button onClick={() => handleStartListening()}>
           Try Again
         </button>
       )}
@@ -112,8 +142,9 @@ console.log(isListening)
         Search on Google
       </button>
 
-
-      <p>( Instruction :-- Click 'Start Listening' and speak your search. The term will appear in the input box. If needed, you can manually edit it before clicking 'Search on Google' to see the results. )</p>
+      <p>
+        ( Instruction :-- Click 'Start Listening' and speak your search. The term will appear in the input box. If needed, you can manually edit it before clicking 'Search on Google' to see the results. )
+      </p>
     </div>
   );
 };
