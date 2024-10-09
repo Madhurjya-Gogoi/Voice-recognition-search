@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 
 const VoiceSearch: React.FC = () => {
@@ -7,7 +7,7 @@ const VoiceSearch: React.FC = () => {
   const [lastSpokenTime, setLastSpokenTime] = useState<number | null>(null);
   const [tryAgainVisible, setTryAgainVisible] = useState<boolean>(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+console.log(isListening)
   const { transcript, resetTranscript, listening } = useSpeechRecognition();
 
   const handleStartListening = () => {
@@ -23,11 +23,11 @@ const VoiceSearch: React.FC = () => {
     setTryAgainVisible(true); // Show try again button
   };
 
-  const handleSearch = () => {
+  const handleSearch = useCallback(() => {
     setSearchTerm(transcript);
     handleStopListening();
     console.log('Search term:', transcript);
-  };
+  },[transcript]);
 
   const handleClear = () => {
     setSearchTerm('');
@@ -61,7 +61,7 @@ const VoiceSearch: React.FC = () => {
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [transcript, lastSpokenTime, listening]);
+  }, [transcript, lastSpokenTime, listening, handleSearch]);
 
   // If user stops speaking for 5 seconds, stop listening
   useEffect(() => {
@@ -99,7 +99,7 @@ const VoiceSearch: React.FC = () => {
         Stop
       </button>
       {tryAgainVisible && (
-        <button onClick={() => resetTranscript() || handleStartListening()}>
+        <button onClick={() =>  handleStartListening()}>
           Try Again
         </button>
       )}
